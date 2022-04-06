@@ -124,18 +124,18 @@ ssh -S socket -O check opc@${BASTION_IP}
 
 Then the admin console will be available on localhost at: http://localhost:9990/
  
-### SSH to a Jboss instance
+### SSH to a JBoss instance
 
 You can SSH to the JBoss instance using:
 
 ```bash
-ssh -J opc@${BASTION_IP} opc@${HOST}
+ssh -J opc@${BASTION_IP} opc@${JBOSS_HOST}
 ```
 
 or if you need to pass a private key identity, use:
 
 ```bash
-ssh -o ProxyCommand="ssh -W %h:%p -i <private_key> opc@${BASTION_IP}" -i <private_key> opc@${HOST}
+ssh -o ProxyCommand="ssh -W %h:%p -i <private_key> opc@${BASTION_IP}" -i <private_key> opc@${JBOSS_HOST}
 ```
 
 ### SCP files to a JBoss instance
@@ -143,7 +143,7 @@ ssh -o ProxyCommand="ssh -W %h:%p -i <private_key> opc@${BASTION_IP}" -i <privat
 To SCP files to the JBoss instance (i.e. to deploy applications)
 
 ```bash
-scp -o ProxyCommand="ssh -W %h:%p opc@${BASTION_IP}" <file-to-transfer.ext> opc@${HOST}:~/
+scp -o ProxyCommand="ssh -W %h:%p opc@${BASTION_IP}" <file-to-transfer.ext> opc@${JBOSS_HOST}:~/
 ```
 
 ## Contributing
