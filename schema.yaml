@@ -1,0 +1,576 @@
+## Copyright © 2021, Oracle and/or its affiliates. 
+## All rights reserved. The Universal Permissive License (UPL), Version 1.0 as shown at http://oss.oracle.com/licenses/upl
+
+title: Deploy WildFly connected to an autonomous database
+description: Deploy WildFly connected to an autonomous database
+schemaVersion: 1.1.0
+version: "20200821"
+variableGroups:
+  - title: General Configuration
+    visible: false
+    variables:
+    - tenancy_ocid
+    - region
+    - release
+    - public_subnet
+    - availability_domain_number
+    - use_existing_vcn
+    - use_existing_nsg
+    - vcn_id
+    - lb_subnet_id
+    - lb_nsg_ids
+    - compute_subnet_id
+    - compute_nsg_ids
+    - atp_subnet_id
+    - atp_nsg_id
+    - bastion_subnet_id
+    - bastion_nsg_ids
+    - atp_private_endpoint
+    - atp_private_endpoint_label
+    - prefix
+    - atp_tde_wallet_zip_file
+    - igw_display_name
+
+  - title: Required Configuration
+    visible: true  
+    variables:
+    - compartment_ocid
+    - availability_domain_name
+    - numberOfNodes
+    - jboss_admin_password
+    - provision_atp
+    - atp_admin_password
+    - show_advanced
+  
+  - title: Networking Optional Configuration
+    visible: 
+        and:
+          - show_advanced
+    variables:
+    - vcn01_cidr_block
+    - vcn01_dns_label
+    - vcn01_display_name
+    - vcn01_subnet_lb_cidr_block
+    - vcn01_subnet_lb_display_name
+    - vcn01_subnet_bastion_cidr_block
+    - vcn01_subnet_bastion_display_name
+    - vcn01_subnet_jboss_cidr_block
+    - vcn01_subnet_jboss_display_name
+    - vcn01_subnet_atp_cidr_block
+    - vcn01_subnet_atp_display_name
+
+  - title: Load Balancer Configuration
+    visible: 
+        and:
+          - show_advanced
+    variables:
+    - lb_shape 
+    - flex_lb_min_shape
+    - flex_lb_max_shape 
+
+  - title: Compute Optional Configuration
+    visible: 
+        and:
+          - show_advanced
+    variables:
+    - ssh_public_key
+    - instance_os
+    - linux_os_version
+    - InstanceShape
+    - InstanceFlexShapeOCPUS
+    - InstanceFlexShapeMemory
+
+  - title: JBoss/WildFly Deployment Mode
+    visible: 
+        and:
+          - show_advanced
+    variables:
+    - jboss_display_name
+    - domain_mode
+    - jboss_admin_username
+
+  - title: Bastion Optional Configuration
+    visible: 
+        and:
+          - show_advanced
+    variables:
+    - use_bastion_service
+    - bastion_vm_shape
+    - bastion_vm_flex_shape_ocpu
+    - bastion_vm_flex_shape_mem
+
+  - title: Autonomous Database (ATP) Optional Configuration
+    visible: 
+        and:
+          - show_advanced
+          - provision_atp
+    variables:
+    - atp_display_name
+    - atp_db_name
+    - atp_cpu_core_count
+    - atp_storage_tbs
+    - atp_autoscaling
+
+  - title: Create a JDBC Datasource Optional Configuration
+    visible: 
+        and:
+          - show_advanced
+          - provision_atp
+    variables:
+    - create_ds
+
+  - title: JDBC Connection Optional Configuration
+    visible: 
+        and:
+          - show_advanced
+          - provision_atp
+          - create_ds
+    variables:
+    - ds_name
+    - atp_username
+    - atp_password
+
+variables:
+  # Hidden variables
+  tenancy_ocid:
+    type: string
+    title: "Tenancy ID"
+    description: "The Oracle Cloud Identifier (OCID) for your tenancy."
+    required: true
+
+  region:
+    type: oci:identity:region:name
+    title: "Region"
+    description: "The region in which to create all resources."
+    required: true
+
+  availability_domain_name:
+    type: oci:identity:availabilitydomain:name
+    required: true
+    visibile: true
+    title: "Availability Domain to be chosen"
+    description: "Availability Domain to be chosen"
+    dependsOn:
+      compartmentId: ${compartment_ocid}
+
+  ssh_public_key:
+    type: oci:core:ssh:publickey
+    title: "SSH Public Key"
+    required: false
+    description: "Public SSH Key to access VM via SSH."
+
+  show_advanced:
+    type: boolean
+    title: "Show advanced options?"
+    description: "Shows advanced options."
+    visible: true
+    default: false
+
+  # Exposed variables
+  compartment_ocid:
+    type: oci:identity:compartment:id
+    title: "Network Compartment"
+    description: "The compartment where you want to create the network resources such as Virtual Cloud Network, security lists, route tables and gateways."
+    required: true
+    default: compartment_ocid
+
+  vcn01_cidr_block:
+    type: string
+    title: "VCN CIDR block"
+    description: "The CIDR block for the VCN."
+    required: false
+    pattern: "^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\/(3[0-2]|[1-2]?[0-9])$"
+    
+  vcn01_dns_label:
+    type: string
+    title: "VCN DNS Label"
+    description: "Choose VCN DNS Label."
+    required: false
+
+  vcn01_display_name:
+    type: string
+    title: "VCN Display Name"
+    description: "Choose VCN Display Name."
+    required: false
+
+  vcn01_subnet_lb_cidr_block:
+    type: string
+    title: "Load Balancer Subnet CIDR block"
+    description: "The CIDR block for Load Balancer Subnet."
+    required: false
+    pattern: "^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\/(3[0-2]|[1-2]?[0-9])$"
+ 
+  vcn01_subnet_lb_display_name:
+    type: string
+    title: "Load Balancer Subnet Display Name"
+    description: "Choose Load Balancer Subnet Display Name."
+    required: false
+
+  vcn01_subnet_bastion_cidr_block:
+    type: string
+    title: "Bastion Subnet CIDR block"
+    description: "The CIDR block for Bastion Subnet."
+    required: false
+    pattern: "^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\/(3[0-2]|[1-2]?[0-9])$"
+ 
+  vcn01_subnet_bastion_display_name:
+    type: string
+    title: "Bastion Subnet Display Name"
+    description: "Choose Bastion Subnet Display Name."
+    required: false
+
+  vcn01_subnet_jboss_cidr_block:
+    type: string
+    title: "JBoss Subnet CIDR block"
+    description: "The CIDR block for JBoss Subnet."
+    required: false
+    pattern: "^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\/(3[0-2]|[1-2]?[0-9])$"
+ 
+  vcn01_subnet_jboss_display_name:
+    type: string
+    title: "JBoss Subnet Display Name"
+    description: "Choose JBoss Subnet Display Name."
+    required: false
+
+  vcn01_subnet_atp_cidr_block:
+    type: string
+    title: "ATP Subnet CIDR block"
+    description: "The CIDR block for ATP Subnet."
+    required: false
+    pattern: "^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]).(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\/(3[0-2]|[1-2]?[0-9])$"
+ 
+  vcn01_subnet_atp_display_name:
+    type: string
+    title: "ATP Subnet Display Name"
+    description: "Choose ATP Subnet Display Name."
+    required: false
+
+  numberOfNodes:
+    title: "Number of WildFly Nodes"
+    description: "Choose the number of WildFly Nodes."
+    type: number
+    required: true
+    default: 2
+
+  lb_shape:
+    type: enum
+    title: "LoadBalancer Shape"
+    description: "Choose LoadBalancer Shape"
+    default: "flexible"
+    required: false 
+    enum:
+      - "flexible"
+      - "100Mbps"
+      - "10Mbps"
+      - "10Mbps-Micro"
+      - "400Mbps"
+      - "8000Mbps"
+
+  flex_lb_min_shape:
+    type: enum
+    required: false
+    default: "10"
+    title: "LB Flex Min Shape"
+    description: "Choose Minimum Shape for Flex Load Balancer."
+    enum:
+      - "10"
+      - "100"
+      - "1000"
+      - "400"
+      - "8000"
+    visible:
+      and:
+        - eq:
+          - lb_shape 
+          - "flexible"
+
+  flex_lb_max_shape:
+    type: enum
+    required: false
+    default: "100"
+    title: "LB Flex Max Shape"
+    description: "Choose Maximum Shape for Flex Load Balancer."
+    enum:
+      - "10"
+      - "100"
+      - "1000"
+      - "400"
+      - "8000"
+    visible:
+      and:
+        - eq:
+          - lb_shape 
+          - "flexible"
+
+  linux_os_version:
+    type: enum
+    required: false
+    visible: false
+    title: "Instance OS version"
+    description: "An Operating System version that determines the operating system version for WildFly host."
+    default: "8"
+    enum:
+      - "8"
+
+  instance_os:
+    type: enum
+    required: false
+    visible: false
+    title: "Instance OS"
+    description: "An Operating System that determines the operating system for WildFly host."
+    default: "Oracle Linux"
+    enum:
+      - "Oracle Linux"
+
+  InstanceShape:
+    type: oci:core:instanceshape:name
+    title: "JBoss/WildFly VM(s) Shape"
+    description: "The shape for the JBoss/WildFly instance(s)"
+    required: true
+    dependsOn:
+      compartmentId: ${compartment_ocid}
+
+  InstanceFlexShapeOCPUS:
+    type: number
+    required: false
+    minimum: 1
+    maximum: 128
+    multipleOf: 1
+    default: 1
+    title: "Flex Shape OCPUs"
+    description: "Choose number of OCPUs for Flex Shape."
+    visible:
+      and:
+        - or:
+          - eq:
+            - InstanceShape 
+            - "VM.Standard.E3.Flex"
+          - eq:
+            - InstanceShape 
+            - "VM.Standard.E4.Flex"
+          - eq:
+            - InstanceShape 
+            - "VM.Standard.A1.Flex"
+          - eq:
+            - InstanceShape 
+            - "VM.Optimized3.Flex"
+
+  InstanceFlexShapeMemory:
+    type: number
+    required: false
+    minimum: 1
+    maximum: 128
+    multipleOf: 1
+    default: 10
+    title: "Flex Shape Memory (GB)"
+    description: "Choose number GB for Flex Shape Memory."
+    visible:
+      and:
+        - or:
+          - eq:
+            - InstanceShape 
+            - "VM.Standard.E3.Flex"
+          - eq:
+            - InstanceShape 
+            - "VM.Standard.E4.Flex"
+          - eq:
+            - InstanceShape 
+            - "VM.Standard.A1.Flex"
+          - eq:
+            - InstanceShape 
+            - "VM.Optimized3.Flex"
+
+  jboss_display_name:
+    type: string
+    title: "JBoss Display Name"
+    description: "Choose JBoss Display Name."
+    required: false
+
+  jboss_admin_username:
+    type: string
+    title: "WildFly Administrator Username"
+    description: "The user name of the WildFly Admin user."
+    required: true
+    default: "admin"
+    pattern: "^[a-z]{4,16}$"
+
+  jboss_admin_password:
+    type: password
+    title: "WildFly Administrator Password"
+    description: "The password for the WildFly Admin user."
+    required: true
+
+  use_bastion_service:
+    type: boolean
+    title: "Use Bastion Service?"
+    description: "Check if you want to use OCI Bastion Service."
+    visible: true
+    default: false
+
+  bastion_vm_shape:
+    type: oci:core:instanceshape:name
+    title: "Bastion Host VM Shape"
+    description: "The shape for the Bastion VM"
+    required: false
+    default: "VM.Standard.E4.Flex"
+    dependsOn:
+      compartmentId: ${compartment_ocid}
+    visible:
+      and:
+        - gt:
+          - numberOfNodes
+          - 1      
+        - eq:
+          - use_bastion_service
+          - false  
+
+  bastion_vm_flex_shape_ocpu:
+    type: number
+    required: false
+    minimum: 1
+    maximum: 128
+    multipleOf: 1
+    default: 1
+    title: "Flex Shape OCPUs"
+    description: "Choose number of OCPUs for Flex Shape."
+    visible:
+      and:
+        - gt:
+          - numberOfNodes
+          - 1      
+        - eq:
+          - use_bastion_service
+          - false         
+        - or:
+          - eq:
+            - bastion_vm_shape 
+            - "VM.Standard.E3.Flex"
+          - eq:
+            - bastion_vm_shape 
+            - "VM.Standard.E4.Flex"
+          - eq:
+            - bastion_vm_shape 
+            - "VM.Standard.A1.Flex"
+          - eq:
+            - bastion_vm_shape 
+            - "VM.Optimized3.Flex"
+
+  bastion_vm_flex_shape_mem:
+    type: number
+    required: false
+    minimum: 1
+    maximum: 128
+    multipleOf: 1
+    default: 1
+    title: "Flex Shape Memory (GB)"
+    description: "Choose number GB for Flex Shape Memory."
+    visible:
+      and:
+        - gt:
+          - numberOfNodes
+          - 1      
+        - eq:
+          - use_bastion_service
+          - false         
+        - or:
+          - eq:
+            - bastion_vm_shape 
+            - "VM.Standard.E3.Flex"
+          - eq:
+            - bastion_vm_shape 
+            - "VM.Standard.E4.Flex"
+          - eq:
+            - bastion_vm_shape 
+            - "VM.Standard.A1.Flex"
+          - eq:
+            - bastion_vm_shape 
+            - "VM.Optimized3.Flex"
+
+  provision_atp:
+    type: boolean
+    title: "Provision an ATP?"
+    description: "Check to provision an Autonomous Database for Transaction Processing."
+    required: true
+    default: true
+
+  atp_admin_password:
+    visible: 
+        and:
+          - provision_atp
+    type: password
+    title: "ATP DB Administrator Password"
+    description: "The password for the admin user (12 to 30 characters [a-zA-Z0-9_@#$!&%]$)"
+    required: 
+         and:
+          - provision_atp
+    pattern: ^[A-Za-z][A-Za-z0-9_#\$]{11,29}$ 
+
+  atp_display_name:
+    type: string
+    title: "ATP Service Display Name"
+    description: "Name of the ATP service"
+    required: true
+    default: "JBossATP"
+
+  atp_db_name:
+    type: string
+    title: "ATP Database Name"
+    description: "Name of the ATP Database."
+    required: true
+    default: "db"
+
+  atp_cpu_core_count:
+    type: number
+    title: "ATP CPU Core Count"
+    description: "Number of CPU cores to use with ATP."
+    required: true
+    default: 1
+
+  atp_storage_tbs:
+    type: number
+    title: "ATP Storage (in TBs)"
+    description: "Number of TBs of storage to use with ATP."
+    required: true
+    default: 1
+
+  atp_autoscaling:
+    type: boolean
+    title: "Enable ATP Autoscaling"
+    description: "Enable ATP auto-scaling (not available on Free Tier)."
+    required: true
+    default: false
+
+  create_ds:
+    type: boolean
+    title: "Create a JDBC Datasource"
+    description: "Create and configure a JDBC datasource for ATP in WildFly."
+    required: true
+    default: false
+
+  ds_name:
+    type: string
+    title: "Datasource name"
+    description: "the name of the datasource as found in the JNDI path java:/jdbc/<datasource-name>."
+    required: true
+    default: OracleDS
+
+  atp_username:
+    type: string
+    title: "Autonomous DB JDBC Username"
+    description: "The User for the JDBC connection."
+    required: true
+
+  atp_password:
+    type: password
+    title: "Autonomous DB JDBC User Password."
+    description: "The password for the JDBC connection user (12 to 30 characters [a-zA-Z0-9@#$!&%]$)."
+    required: true
+    pattern: "^[a-zA-Z0-9@#$!&%]{12,30}$"
+
+  domain_mode:
+    type: boolean
+    title: "Domain Controller mode"
+    description: "Setup as in Domain Controller mode for administration of all servers through a central node."
+    required: true
+    default: true
+
