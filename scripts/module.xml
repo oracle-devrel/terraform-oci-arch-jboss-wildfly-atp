@@ -1,6 +1,9 @@
 <module xmlns="urn:jboss:module:1.1" name="com.oracle">
   <resources>
     <resource-root path="ojdbc8.jar"/>
+    <resource-root path="oraclepki.jar"/>
+    <resource-root path="osdt_cert.jar"/>
+    <resource-root path="osdt_core.jar"/>
   </resources>
   <dependencies>
     <module name="javax.api"/>
