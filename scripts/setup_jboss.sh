@@ -9,8 +9,8 @@ touch /tmp/init.log
 sudo yum install -y java-11-openjdk-devel
 
 echo "Download Wildfly" >> /tmp/init.log
-export JBOSS_VERSION=20.0.1.Final
-wget https://download.jboss.org/wildfly/${JBOSS_VERSION}/wildfly-${JBOSS_VERSION}.tar.gz
+export JBOSS_VERSION=26.1.2.Final
+wget https://github.com/wildfly/wildfly/releases/download/${JBOSS_VERSION}/wildfly-${JBOSS_VERSION}.tar.gz
 
 echo "Install Wildfly" >> /tmp/init.log
 tar -xzvf wildfly-${JBOSS_VERSION}.tar.gz
